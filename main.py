@@ -11,7 +11,7 @@ class Kart:
         self.brake_deceleration = 0.0003
         self.max_speed = 0.01
         self.min_speed = -0.005
-        self.slow_down_factor = 1 # Redução de velocidade (10%) fora da pista
+        self.slow_down_factor = 0.95 # Redução de velocidade (10%) fora da pista
 
     def update(self, keys, et, on_track, on_border):
         # Se o kart ESTIVER na pista, não faz a redução de velocidade
@@ -138,7 +138,7 @@ class Game:
     def load_sprites(self):
         # Carrega os sprites do Mario e do kart
         mario_sheet = pg.image.load('assets/mario_sheet.png').convert_alpha()
-        sprite_width, sprite_height, sprite_scale = 32, 32, 4
+        sprite_width, sprite_height, sprite_scale = 32, 32, 6.5
         self.mario_w = pg.transform.scale(mario_sheet.subsurface(pg.Rect(5.55 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)), 
                                           (sprite_width * sprite_scale, sprite_height * sprite_scale))
         self.mario_a = pg.transform.scale(mario_sheet.subsurface(pg.Rect(4.6 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)), 
