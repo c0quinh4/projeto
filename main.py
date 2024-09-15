@@ -5,19 +5,15 @@ from numba import njit
 class Kart:
     def __init__(self):
         # Inicialização das variáveis do kart
-        self.posx, self.posy, self.rot, self.vel = 27, 18.5, 4.7, 0  # Aproximadamente no centro da linha de chegada
+        self.posx, self.posy, self.rot, self.vel = 27, 18.5, 4.7, 0  # Posição inicial ajustada
         self.acceleration = 0.00001
         self.deceleration = 0.00001
         self.brake_deceleration = 0.0003
         self.max_speed = 0.01
         self.min_speed = -0.005
-        self.slow_down_factor = 0.95 # Redução de velocidade (10%) fora da pista
+        self.slow_down_factor = 0.95  # Redução de velocidade fora da pista
 
     def update(self, keys, et, on_track, on_border):
-        # Se o kart ESTIVER na pista, não faz a redução de velocidade
-        if on_track:
-            self.vel *= self.slow_down_factor  # Mantém a velocidade normal na pista
-
         # Atualiza a rotação com base nas teclas de direção
         self.rot += 0.0015 * et * (keys[pg.K_RIGHT] or keys[ord('d')] - (keys[pg.K_LEFT] or keys[ord('a')]))
 
@@ -42,11 +38,11 @@ class Kart:
             elif self.vel < 0:
                 self.vel = min(self.vel + self.deceleration * et, 0)
 
-        # Atualiza a posição do kart, mas impede o movimento para frente na borda
+        # Atualiza a posição do kart
         new_posx = self.posx + np.cos(self.rot) * self.vel * et
         new_posy = self.posy + np.sin(self.rot) * self.vel * et
 
-        # Se estiver na borda, o kart pode se mover para trás ou para os lados
+        # Atualiza posição e velocidade considerando borda
         if on_border and (keys[pg.K_UP] or keys[ord('w')]):  # Bloqueia avanço na borda
             self.vel = 0
         else:
@@ -77,22 +73,14 @@ class Renderer:
     def is_on_track(self, posx, posy):
         # Verifica se o kart está sobre a área da textura "pista"
         xx, yy = int(posx / 30 % 1 * 1023), int(posy / 30 % 1 * 1023)
-        # Retorna True se o ponto estiver na área "pista" e False caso contrário
-        return np.mean(self.track_surface[xx][yy]) > 0.5  # Assumimos que a textura "pista" tem áreas claras para detecção
+        return np.mean(self.track_surface[xx][yy]) > 0.5
 
     def is_on_border(self, posx, posy):
         # Verifica se o kart está nas áreas coloridas da borda (ignorar centro preto)
         xx, yy = int(posx / 30 % 1 * 1023), int(posy / 30 % 1 * 1023)
-
-        # Condição para verificar se está dentro das bordas coloridas (superior, inferior e laterais)
-        # Limite superior e inferior (faixa de y)
-        if (yy < 5 or yy > 973):  # Assumindo que as bordas superiores e inferiores ocupam 50 pixels de altura
+        if (yy < 5 or yy > 973) or (xx < 5 or xx > 973):
             return True
-        # Limite esquerdo e direito (faixa de x)
-        if (xx < 5 or xx > 973):  # Assumindo que as bordas laterais ocupam 50 pixels de largura
-            return True
-
-        return False  # Se não estiver nas áreas das bordas, retorna False
+        return False
 
 @njit()
 def new_frame(posx, posy, rot, frame, sky, floor, track_surface, border_surface, hres, halfvres, mod):
@@ -104,12 +92,8 @@ def new_frame(posx, posy, rot, frame, sky, floor, track_surface, border_surface,
             n = (halfvres / (halfvres - j)) / cos2
             x, y = posx + cos * n, posy + sin * n
             xx, yy = int(x / 30 % 1 * 1023), int(y / 30 % 1 * 1023)
-
             shade = 0.95 + 0.05 * (1 - j / halfvres)
-
-            # Renderiza a textura normal do chão
             frame[i][halfvres * 2 - j - 1] = floor[xx][yy] * shade
-
     return frame
 
 class SoundManager:
@@ -130,20 +114,32 @@ class Game:
         self.sound_manager = SoundManager()
         self.load_sprites()
         self.running = True
+        self.controls_enabled = False  # Controles inicialmente desativados
+        self.lap_count = 0  # Contador de voltas
+        self.has_crossed_finish_line = False  # Verificação para evitar contagem de volta múltipla
 
         # Inicializa a fonte
         pg.font.init()
         self.font = pg.font.SysFont('Arial', 24)
 
+        # Carrega o countdown assets e som
+        self.countdown_images = [
+            pg.image.load('assets/3.png'),
+            pg.image.load('assets/2.png'),
+            pg.image.load('assets/1.png'),
+            pg.image.load('assets/go.png')
+        ]
+        self.countdown_sound = 'assets/ct.mp3'  # Som do countdown
+
     def load_sprites(self):
         # Carrega os sprites do Mario e do kart
         mario_sheet = pg.image.load('assets/mario_sheet.png').convert_alpha()
         sprite_width, sprite_height, sprite_scale = 32, 32, 6.5
-        self.mario_w = pg.transform.scale(mario_sheet.subsurface(pg.Rect(5.55 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)), 
+        self.mario_w = pg.transform.scale(mario_sheet.subsurface(pg.Rect(5.55 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)),
                                           (sprite_width * sprite_scale, sprite_height * sprite_scale))
-        self.mario_a = pg.transform.scale(mario_sheet.subsurface(pg.Rect(4.6 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)), 
+        self.mario_a = pg.transform.scale(mario_sheet.subsurface(pg.Rect(4.6 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)),
                                           (sprite_width * sprite_scale, sprite_height * sprite_scale))
-        self.mario_d = pg.transform.scale(mario_sheet.subsurface(pg.Rect(7.38 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)), 
+        self.mario_d = pg.transform.scale(mario_sheet.subsurface(pg.Rect(7.38 * sprite_width, 1.1 * sprite_height, sprite_width, sprite_height)),
                                           (sprite_width * sprite_scale, sprite_height * sprite_scale))
         self.kart_sprite = pg.transform.scale(pg.image.load('assets/kart.png'), (200, 200))
         self.current_sprite = self.mario_w  # Sprite inicial
@@ -165,37 +161,97 @@ class Game:
         text_surface = self.font.render(text, True, (255, 255, 255))  # Texto branco
         self.screen.blit(text_surface, (x, y))
 
+    def countdown(self):
+        # Toca o som do countdown
+        pg.mixer.music.load(self.countdown_sound)
+        pg.mixer.music.play()
+
+        # Exibe o countdown de 3, 2, 1 e Go por cima da tela do jogo
+        for i in range(4):
+            # Renderiza o cenário e os sprites do jogo
+            self.render_game_frame()
+
+            # Sobrepõe o countdown sobre o jogo
+            self.screen.blit(self.countdown_images[i], (400 - self.countdown_images[i].get_width() // 2, 300 - self.countdown_images[i].get_height() // 2))
+            pg.display.update()
+            pg.time.wait(1000)  # Espera 1 segundo por imagem
+
+        # Aguarda o fim do som do countdown
+        while pg.mixer.music.get_busy():
+            pg.time.wait(100)
+
+        # Inicia a música de fundo
+        self.sound_manager = SoundManager()
+        self.controls_enabled = True  # Habilita os controles após o countdown
+
+    def check_finish_line(self):
+        # Coordenadas da linha de chegada
+        finish_line_x_min = 26.25
+        finish_line_x_max = 28.7
+        finish_line_y = 17.5
+
+        # Verifica se o kart está sobre a linha de chegada
+        if finish_line_x_min <= self.kart.posx <= finish_line_x_max and abs(self.kart.posy - finish_line_y) < 0.1:
+            # Verifica se o kart está se movendo para frente
+            if self.kart.vel > 0:
+                # Se o kart cruzar a linha de chegada e ainda não foi contabilizado
+                if not self.has_crossed_finish_line:
+                    self.lap_count += 1  # Incrementa o contador de voltas
+                    self.has_crossed_finish_line = True  # Marca que cruzou a linha de chegada
+            else:
+                self.has_crossed_finish_line = False  # Permite contar nova volta se o kart for para trás
+        else:
+            self.has_crossed_finish_line = False  # Reseta se o kart saiu da linha de chegada
+
+    def render_game_frame(self):
+        # Atualiza o estado do jogo sem controle do usuário
+        et = self.clock.tick()  # Tempo entre frames
+
+        # Renderiza o cenário
+        frame_surface = self.renderer.render_frame(self.kart.posx, self.kart.posy, self.kart.rot)
+        frame_surface = pg.transform.scale(frame_surface, (800, 600))
+        self.screen.blit(frame_surface, (0, 0))
+
+        # Desenha o sprite do kart
+        sprite_rect = self.current_sprite.get_rect(center=(400, 600 - 120))
+        self.screen.blit(self.current_sprite, sprite_rect)
+
+        # Mostra a posição x e y do kart no canto superior esquerdo com duas casas decimais
+        self.draw_text(f'Pos: ({self.kart.posx:.2f}, {self.kart.posy:.2f})', 10, 10)
+
+        # Mostra o número de voltas no canto superior esquerdo
+        self.draw_text(f'Voltas: {self.lap_count}', 10, 40)
+
     def run(self):
+        # Executa o countdown antes de começar o jogo
+        self.countdown()
+
         # Loop principal do jogo
         while self.running:
             for event in pg.event.get():
                 if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
                     self.running = False
 
-            self.handle_input()
+            # Apenas permite controle após o countdown
+            if self.controls_enabled:
+                self.handle_input()
 
-            # Atualiza o estado do jogo
-            et = self.clock.tick()  # Tempo entre frames
-            keys = pg.key.get_pressed()
+                # Atualiza o estado do jogo
+                et = self.clock.tick()  # Tempo entre frames
+                keys = pg.key.get_pressed()
 
-            # Verifica se o kart está sobre a textura "pista" ou "borda"
-            on_track = self.renderer.is_on_track(self.kart.posx, self.kart.posy)
-            on_border = self.renderer.is_on_border(self.kart.posx, self.kart.posy)
+                # Verifica se o kart está sobre a textura "pista" ou "borda"
+                on_track = self.renderer.is_on_track(self.kart.posx, self.kart.posy)
+                on_border = self.renderer.is_on_border(self.kart.posx, self.kart.posy)
 
-            # Atualiza a posição e velocidade do kart considerando se está na pista ou borda
-            self.kart.update(keys, et, on_track, on_border)
+                # Atualiza a posição e velocidade do kart considerando se está na pista ou borda
+                self.kart.update(keys, et, on_track, on_border)
+
+                # Verifica se cruzou a linha de chegada
+                self.check_finish_line()
 
             # Renderiza o cenário e os sprites
-            frame_surface = self.renderer.render_frame(self.kart.posx, self.kart.posy, self.kart.rot)
-            frame_surface = pg.transform.scale(frame_surface, (800, 600))
-            self.screen.blit(frame_surface, (0, 0))
-
-            # Desenha o sprite do kart
-            sprite_rect = self.current_sprite.get_rect(center=(400, 600 - 120))
-            self.screen.blit(self.current_sprite, sprite_rect)
-
-            # Mostra a posição x e y do kart no canto superior esquerdo
-            self.draw_text(f'Pos: ({int(self.kart.posx)}, {int(self.kart.posy)})', 10, 10)
+            self.render_game_frame()
 
             # Atualiza a tela
             pg.display.update()
