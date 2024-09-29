@@ -42,6 +42,15 @@ class Game:
         ]
         self.countdown_sound = 'assets/ct.mp3'
         
+        # Inicializa o módulo de joystick
+        pg.joystick.init()
+        # Lista de joysticks conectados
+        self.joysticks = []
+        for i in range(pg.joystick.get_count()):
+            joystick = pg.joystick.Joystick(i)
+            joystick.init()
+            self.joysticks.append(joystick)
+            
 
     def load_sprites(self):
         # Carrega a folha de sprites do Mario com transparência
@@ -71,18 +80,75 @@ class Game:
     def handle_input(self):
         # Captura o estado de todas as teclas
         keys = pg.key.get_pressed()
+        turn_value = 0.0
+        accelerate_value = 0.0
+        brake_value = 0.0
+        
         # Atualiza o sprite atual com base na tecla pressionada
         if keys[pg.K_LEFT] or keys[ord('a')]:
-            # Se a tecla esquerda ou 'A' for pressionada, mostra o sprite virando à esquerda
+            turn_value = -1.0
+        if keys[pg.K_RIGHT] or keys[ord('d')]:
+            turn_value = 1.0
+        if keys[pg.K_UP] or keys[ord('w')]:
+            accelerate_value = 1.0
+        if keys[pg.K_DOWN] or keys[ord('s')]:
+            brake_value = 1.0
+            
+        # Verifica se há joysticks conectados
+        if self.joysticks:
+            for joystick in self.joysticks:                
+                # Eixo horizontal (esquerda/direita)
+                axis_horizontal = joystick.get_axis(0)
+                
+                # Eixo do gatilho
+                trigger_axis_left = joystick.get_axis(4)
+                
+                # Definir zona morta para evitar flutuações
+                deadzone = 0.1
+
+                # Atualiza o valor de virada com base no eixo horizontal
+                if abs(axis_horizontal) > deadzone:
+                    turn_value = axis_horizontal  # Valor entre -1.0 e 1.0
+                else:
+                    turn_value = 0.0
+
+                # Normaliza o valor do gatilho esquerdo
+                left_trigger_value = (trigger_axis_left + 1) / 2  # Varia de 0 (não pressionado) a 1 (pressionado)
+
+                # Mapeia o eixo dos gatilhos compartilhados para acelerar e frear
+                if left_trigger_value > deadzone:
+                    # Gatilho esquerdo está pressionado
+                    brake_value = left_trigger_value  # Converte para positivo
+                else:
+                    brake_value = 0.0
+                    
+                # Se houver um gatilho direito (por exemplo, eixo 4), podemos fazer o mesmo
+                trigger_axis_right = joystick.get_axis(5)
+                right_trigger_value = (trigger_axis_right + 1) / 2  # Normaliza para 0 a 1
+
+                if right_trigger_value > deadzone:
+                    accelerate_value = right_trigger_value
+                else:
+                    accelerate_value = 0.0
+                    
+        # Atualiza o estado do kart com valores analógicos
+        self.kart.handle_movement(turn_value, accelerate_value, brake_value)
+
+        # Atualiza o sprite atual com base no estado do kart
+        if self.kart.vel < 0:
+            # Se o kart estiver em marcha à ré, usa o sprite 'kart.png'
+            self.current_sprite = self.kart_sprite
+        elif turn_value < -0.1:
+            # Virando à esquerda
             self.current_sprite = self.mario_a
-        elif keys[pg.K_RIGHT] or keys[ord('d')]:
-            # Se a tecla direita ou 'D' for pressionada, mostra o sprite virando à direita
+        elif turn_value > 0.1:
+            # Virando à direita
             self.current_sprite = self.mario_d
-        elif keys[pg.K_DOWN] or keys[ord('s')]:
-            # Se a tecla para baixo ou 'S' for pressionada, mostra o sprite do kart
+        elif brake_value > 0.1 and self.kart.vel > 0:
+            # Frenando (se ainda estiver se movendo para frente)
             self.current_sprite = self.kart_sprite
         else:
-            # Caso contrário, mostra o sprite olhando para frente
+            # Sprite padrão (Mario olhando para frente)
             self.current_sprite = self.mario_w
 
     def countdown(self):
@@ -193,18 +259,16 @@ class Game:
                 # Calcula o tempo desde o último quadro
                 et = self.clock.tick()
                 # Captura o estado das teclas pressionadas
-                keys = pg.key.get_pressed()
+                #keys = pg.key.get_pressed()
                 # Verifica se o kart está na pista ou na borda
                 on_track = self.renderer.is_on_track(self.kart.posx, self.kart.posy)
                 on_border = self.renderer.is_on_border(self.kart.posx, self.kart.posy)
                 # Atualiza a posição e o estado do kart
-                self.kart.update(keys, et, on_track, on_border)
+                self.kart.update(et, on_track, on_border)
                 # Verifica se o jogador cruzou a linha de chegada
                 self.check_finish_line()
             # Renderiza o quadro atual do jogo
             self.render_game_frame()
-            
-            
 
             # Atualiza a tela com o novo quadro
             pg.display.update()
