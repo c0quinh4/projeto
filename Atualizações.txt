@@ -1,0 +1,18 @@
+
+Objetivo:
+Pegar X moedas em Y voltas (ou em Y tempo) para ganhar, caso contrário perde.
+
+
+Poderes: 
+
+BOM
+Andar mais rápido por X segundos
+Ganhar uma moeda
+Perder uma volta
+
+RUIM
+Andar mais devagar por X segundos
+Perder uma moeda
+Ganhar uma volta
+
+*PODER SECRETO* (opção ruim ou opção boa)
