@@ -8,14 +8,14 @@ class Kart:
         # Parâmetros de movimento
         self.acceleration = 0.00001           # Taxa de aceleração ao acelerar
         self.deceleration = 0.00001           # Taxa de desaceleração natural
-        self.brake_deceleration = 0.0003      # Taxa de desaceleração ao frear
+        self.brake_deceleration = 0.00005      # Taxa de desaceleração ao frear
         self.max_speed = 0.01                 # Velocidade máxima para frente
         self.min_speed = -0.005               # Velocidade máxima para trás (marcha à ré)
         self.slow_down_factor = 0.99           # Fator de redução de velocidade fora da pista
         
     def handle_movement(self, turn_value, accelerate_value, brake_value):
         # Define o fator de velocidade de rotação
-        rotation_speed_factor = 0.01  # Ajuste este valor para controlar a sensibilidade
+        rotation_speed_factor = 0.005  # Ajuste este valor para controlar a sensibilidade
         # Atualiza a rotação proporcionalmente ao valor do eixo
         self.rot += turn_value * rotation_speed_factor
 
