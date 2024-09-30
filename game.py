@@ -2,6 +2,7 @@ import pygame as pg
 from kart import Kart
 from renderer import Renderer
 from sound_manager import SoundManager
+import numpy as np
 
 class Game:
     def __init__(self):
@@ -206,6 +207,11 @@ class Game:
         frame_surface = pg.transform.scale(frame_surface, (800, 600))
         # Desenha o quadro renderizado na tela
         self.screen.blit(frame_surface, (0, 0))
+        
+        # Desenha o sprite atual (kart do jogador) na tela
+        sprite_rect = self.current_sprite.get_rect(center=(400, 600 - 120))
+        self.screen.blit(self.current_sprite, sprite_rect)
+        
         # Obtém o retângulo do sprite atual para posicioná-lo corretamente
         sprite_rect = self.current_sprite.get_rect(center=(400, 600 - 120))
         # Desenha o sprite atual (kart) na tela
@@ -213,6 +219,7 @@ class Game:
         # Exibe informações na tela, como posição e voltas
         self.draw_text(f'Pos: ({self.kart.posx:.2f}, {self.kart.posy:.2f})', 10, 10)
         self.draw_text(f'Voltas: {self.lap_count}', 10, 40)
+
 
     def draw_text(self, text, x, y):
         # Renderiza o texto usando a fonte definida
@@ -258,13 +265,11 @@ class Game:
                 self.handle_input()
                 # Calcula o tempo desde o último quadro
                 et = self.clock.tick()
-                # Captura o estado das teclas pressionadas
-                #keys = pg.key.get_pressed()
                 # Verifica se o kart está na pista ou na borda
                 on_track = self.renderer.is_on_track(self.kart.posx, self.kart.posy)
                 on_border = self.renderer.is_on_border(self.kart.posx, self.kart.posy)
                 # Atualiza a posição e o estado do kart
-                self.kart.update(et, on_track, on_border)
+                self.kart.update(et, on_track, on_border, self.renderer.maph, self.renderer.size)
                 # Verifica se o jogador cruzou a linha de chegada
                 self.check_finish_line()
             # Renderiza o quadro atual do jogo

@@ -43,7 +43,7 @@ class Kart:
             elif self.vel < 0:
                 self.vel = min(self.vel + self.deceleration, 0)     
 
-    def update(self, et, on_track, on_border):
+    def update(self, et, on_track, on_border, maph, size):
         # Se o kart ESTIVER na pista, não aplica redução de velocidade
         if on_track:
             self.vel *= self.slow_down_factor  # Mantém a velocidade normal na pista
@@ -52,10 +52,13 @@ class Kart:
         new_posx = self.posx + np.cos(self.rot) * self.vel * et
         new_posy = self.posy + np.sin(self.rot) * self.vel * et
 
-        # Se estiver na borda e tentando avançar, bloqueia o movimento para frente
-        if on_border and self.vel > 0:
-            self.vel = 0  # Bloqueia avanço na borda
+        # Checar colisão com as paredes
+        next_posx = self.posx + np.cos(self.rot) * self.vel * et
+        next_posy = self.posy + np.sin(self.rot) * self.vel * et
+        if maph[int(next_posx) % size][int(next_posy) % size] != 1:
+            # Se não houver parede, atualiza a posição
+            self.posx = next_posx
+            self.posy = next_posy
         else:
-            # Atualiza a posição do kart com os novos valores
-            self.posx = new_posx
-            self.posy = new_posy
+            # Se houver parede, para o kart
+            self.vel = 0

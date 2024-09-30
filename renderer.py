@@ -4,14 +4,17 @@ from numba import njit  # Importa o decorador njit para otimização de funçõe
 
 class Renderer:
     def __init__(self, hres, halfvres):
-        # Define a resolução horizontal (hres) e metade da resolução vertical (halfvres)
         self.hres, self.halfvres = hres, halfvres
-        # Calcula um modificador para ajustes de ângulo
         self.mod = hres / 60
-        # Cria um frame inicial com valores aleatórios (ruído)
+        self.size = 32
+        self.maph = np.zeros((self.size, self.size), dtype=int)
         self.frame = np.random.uniform(0, 1, (hres, halfvres * 2, 3))
-        # Carrega os recursos gráficos necessários
         self.load_assets()
+        
+        self.maph[0, :] = 1
+        self.maph[:, 0] = 1
+        self.maph[self.size - 1, :] = 1
+        self.maph[:, self.size - 1] = 1
 
     def load_assets(self):
         # Carrega e escala a imagem do céu, convertendo-a em um array 3D normalizado (valores entre 0 e 1)
@@ -36,6 +39,11 @@ class Renderer:
         self.border_surface = pg.surfarray.array3d(
             pg.image.load('assets/borda.png').convert_alpha()
         ) / 255
+        
+        # Carregar a textura azul para as paredes
+        blue_texture = np.zeros((100, 100, 3))
+        blue_texture[:, :] = [0, 0, 1]  # Cor azul em RGB normalizado (0 a 1)
+        self.wall_texture = blue_texture
 
         # Obtém as dimensões da textura do chão
         self.floor_width, self.floor_height = self.floor.shape[0], self.floor.shape[1]
@@ -44,7 +52,8 @@ class Renderer:
         # Chama a função otimizada para gerar um novo frame com base na posição e rotação do kart
         self.frame = new_frame(
             posx, posy, rot, self.frame, self.sky, self.floor,
-            self.track_surface, self.border_surface, self.hres, self.halfvres, self.mod
+            self.track_surface, self.border_surface,
+            self.hres, self.halfvres, self.mod, self.maph, self.size, self.wall_texture
         )
         # Converte o array do frame em uma superfície do Pygame para exibição
         return pg.surfarray.make_surface(self.frame * 255)
@@ -64,30 +73,30 @@ class Renderer:
         return False
 
 @njit()
-def new_frame(posx, posy, rot, frame, sky, floor, track_surface, border_surface, hres, halfvres, mod):
-    # Loop para cada coluna horizontal na resolução definida
+def new_frame(posx, posy, rot, frame, sky, floor, track_surface, border_surface, hres, halfvres, mod, maph, size, wall_texture):
     for i in range(hres):
-        # Calcula o ângulo de visão atual, ajustando com base no campo de visão
         rot_i = rot + np.deg2rad(i / mod - 30)
-        # Calcula os valores de seno e cosseno do ângulo atual
         sin, cos = np.sin(rot_i), np.cos(rot_i)
-        # Compensa a distorção da projeção em 3D
         cos2 = np.cos(np.deg2rad(i / mod - 30))
-        # Define a linha do céu correspondente ao ângulo atual
         frame[i][:] = sky[int(np.rad2deg(rot_i) % 359)][:]
-
-        # Loop para cada linha vertical na metade inferior da tela (chão)
+    
         for j in range(halfvres):
-            # Calcula a distância projetada para o ponto atual
             n = (halfvres / (halfvres - j)) / cos2
-            # Calcula as coordenadas reais no mundo para o ponto atual
             x = posx + cos * n
             y = posy + sin * n
-            # Converte as coordenadas reais para índices na textura do chão
             xx = int(x / 30 % 1 * 1023)
             yy = int(y / 30 % 1 * 1023)
-            # Aplica um sombreamento gradual com base na distância
             shade = 0.95 + 0.05 * (1 - j / halfvres)
-            # Define a cor do pixel atual no frame aplicando a textura do chão e o sombreamento
-            frame[i][halfvres * 2 - j - 1] = floor[xx][yy] * shade
+            
+            # Verificar se há uma parede no mapa
+            if maph[int(x) % size][int(y) % size] == 1:
+                # Renderizar a parede
+                h = halfvres - j
+                c = shade * wall_texture[int(x * 10 % 100)][int(y * 10 % 100)]
+                for k in range(h * 2):
+                    if 0 <= halfvres - h + k < frame.shape[1]:
+                        frame[i][halfvres - h + k] = c
+                break
+            else:
+                frame[i][halfvres * 2 - j - 1] = floor[xx][yy] * shade
     return frame
