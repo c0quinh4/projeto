@@ -4,7 +4,7 @@ import pygame as pg
 class Kart:
     def __init__(self):
         # Inicializa a posição (posx, posy), rotação (rot) e velocidade (vel) do kart
-        self.posx, self.posy, self.rot, self.vel = 27, 18.5, 4.7, 0  # Posição inicial ajustada
+        self.posx, self.posy, self.rot, self.vel = 27, 18.5, 4.7, 0  # Posição inicial
         # Parâmetros de movimento
         self.acceleration = 0.00001           # Taxa de aceleração ao acelerar
         self.deceleration = 0.00001           # Taxa de desaceleração natural
@@ -13,11 +13,14 @@ class Kart:
         self.min_speed = -0.005               # Velocidade máxima para trás (marcha à ré)
         self.slow_down_factor = 0.99           # Fator de redução de velocidade fora da pista
         
+    '''processa os inputs de movimento (aceleração, frenagem, rotação) e ajusta a velocidade e direção do kart'''
     def handle_movement(self, turn_value, accelerate_value, brake_value):
         # Define o fator de velocidade de rotação
-        rotation_speed_factor = 0.005  # Ajuste este valor para controlar a sensibilidade
-        # Atualiza a rotação proporcionalmente ao valor do eixo
-        self.rot += turn_value * rotation_speed_factor
+        rotation_speed_factor = 0.008  # Ajuste este valor para controlar a sensibilidade
+
+        # A rotação só ocorre se o kart estiver em movimento (acelerando ou freando)
+        if self.vel != 0:
+            self.rot += turn_value * rotation_speed_factor
 
         # Aceleração proporcional
         if accelerate_value > 0:
@@ -41,12 +44,13 @@ class Kart:
             if self.vel > 0:
                 self.vel = max(self.vel - self.deceleration, 0)
             elif self.vel < 0:
-                self.vel = min(self.vel + self.deceleration, 0)     
-
+                self.vel = min(self.vel + self.deceleration, 0)    
+                
+    '''atualiza a posição do kart com base no tempo e verifica colisões com as paredes'''
     def update(self, et, on_track, on_border, maph, size):
         # Se o kart ESTIVER na pista, não aplica redução de velocidade
         if on_track:
-            self.vel *= self.slow_down_factor  # Mantém a velocidade normal na pista
+            self.vel *= self.slow_down_factor
 
         # Calcula a nova posição do kart com base na velocidade e direção
         new_posx = self.posx + np.cos(self.rot) * self.vel * et

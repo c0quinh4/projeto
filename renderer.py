@@ -2,6 +2,7 @@ import numpy as np
 import pygame as pg
 from numba import njit  # Importa o decorador njit para otimização de funções numéricas
 
+'''Inicializa o ambiente de renderização para uma resolução específica'''
 class Renderer:
     def __init__(self, hres, halfvres):
         self.hres, self.halfvres = hres, halfvres
@@ -17,7 +18,7 @@ class Renderer:
         self.maph[:, self.size - 1] = 1
 
     def load_assets(self):
-        # Carrega e escala a imagem do céu, convertendo-a em um array 3D normalizado (valores entre 0 e 1)
+        # Carrega e escala a imagem do céu, convertendo-a em um array
         self.sky = pg.surfarray.array3d(
             pg.transform.scale(
                 pg.image.load('assets/skybox.jpg'),
@@ -25,12 +26,12 @@ class Renderer:
             )
         ) / 255
 
-        # Carrega a textura do chão (pista), convertendo-a em um array 3D normalizado
+        # Carrega a textura do chão (pista), convertendo-a em um array
         self.floor = pg.surfarray.array3d(
             pg.image.load('assets/MarioKart.png')
         ) / 255
 
-        # Carrega a máscara que define onde é pista (track) e onde não é
+        # Carrega a máscara que define onde é pista e onde não é
         self.track_surface = pg.surfarray.array3d(
             pg.image.load('assets/pista.png').convert_alpha()
         ) / 255
@@ -42,14 +43,14 @@ class Renderer:
         
         # Carregar a textura azul para as paredes
         blue_texture = np.zeros((100, 100, 3))
-        blue_texture[:, :] = [0, 0, 1]  # Cor azul em RGB normalizado (0 a 1)
+        blue_texture[:, :] = [0, 0, 1]
         self.wall_texture = blue_texture
 
         # Obtém as dimensões da textura do chão
         self.floor_width, self.floor_height = self.floor.shape[0], self.floor.shape[1]
 
     def render_frame(self, posx, posy, rot):
-        # Chama a função otimizada para gerar um novo frame com base na posição e rotação do kart
+        # Chama a função para gerar um novo frame com base na posição e rotação do kart
         self.frame = new_frame(
             posx, posy, rot, self.frame, self.sky, self.floor,
             self.track_surface, self.border_surface,
@@ -61,17 +62,16 @@ class Renderer:
     def is_on_track(self, posx, posy):
         # Calcula as coordenadas na textura da pista com base na posição do kart
         xx, yy = int(posx / 30 % 1 * 1023), int(posy / 30 % 1 * 1023)
-        # Retorna True se a média dos valores de cor no ponto for maior que 0.5 (indicando pista)
         return np.mean(self.track_surface[xx][yy]) > 0.5
 
     def is_on_border(self, posx, posy):
         # Calcula as coordenadas na textura da borda com base na posição do kart
         xx, yy = int(posx / 30 % 1 * 1023), int(posy / 30 % 1 * 1023)
-        # Verifica se as coordenadas estão próximas das bordas da textura (margem de 5 pixels)
         if (yy < 5 or yy > 973) or (xx < 5 or xx > 973):
             return True
         return False
-
+    
+'''função de renderização que gera um novo frame de uma cena em 3D simplificada, utilizando raycasting'''
 @njit()
 def new_frame(posx, posy, rot, frame, sky, floor, track_surface, border_surface, hres, halfvres, mod, maph, size, wall_texture):
     for i in range(hres):
