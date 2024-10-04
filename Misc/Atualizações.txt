@@ -16,3 +16,14 @@ Perder uma moeda
 Ganhar uma volta
 
 *PODER SECRETO* (opção ruim ou opção boa)
+
+
+ETAPAS:
+
+1. Fazer caixas funcionar
+    1.1 Adicionar os poders
+2. Fazer moedas funcionar
+    2.1 Mecanica de coletar moedas e fazer elas sumirem do mapa
+3. Implementar dinâmica de jogo: coletar moedas no tempo (jogo singleplayer finalizado)
+
+4. Implementar volante com acelerômetro
