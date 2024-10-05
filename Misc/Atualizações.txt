@@ -2,21 +2,17 @@
 Objetivo:
 Pegar X moedas em Y voltas (ou em Y tempo) para ganhar, caso contrário perde.
 
+Poderes:
 
-Poderes: 
-
-BOM
-Andar mais rápido por X segundos
-Ganhar uma moeda
-Perder uma volta
+BOM:
+Boost
++ 1 (sprite moeda)
+- 1 Volta
 
 RUIM
-Andar mais devagar por X segundos
-Perder uma moeda
-Ganhar uma volta
-
-*PODER SECRETO* (opção ruim ou opção boa)
-
+Boost com block vermelho
+- 1 (sprite moeda)
++ 1 Volta
 
 ETAPAS:
 
@@ -27,3 +23,10 @@ ETAPAS:
 3. Implementar dinâmica de jogo: coletar moedas no tempo (jogo singleplayer finalizado)
 
 4. Implementar volante com acelerômetro
+
+Posições das moedas:
+21.82, 9.26
+1.51, 11.55
+7.69, 19.17
+21.29, 25.97
+27.57, 18.56
