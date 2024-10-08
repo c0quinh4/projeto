@@ -2,6 +2,8 @@ import pygame as pg
 import numpy as np
 from numba import njit
 import random
+import serial
+
 
 # Definição de constantes para largura e altura da tela
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
@@ -22,13 +24,13 @@ class Kart:
 
     def handle_movement(self, turn_value, accelerate_value, brake_value):
         """Processa os inputs de movimento e ajusta a velocidade e direção do kart."""
-        rotation_speed_factor = 0.01  # Fator de velocidade de rotação
+        fator_rotacao = 0.05  # Fator ajustado para velocidade de rotação
 
         if self.vel != 0:
             # Ajusta a rotação do kart com base na velocidade atual
-            speed_ratio = abs(self.vel) / self.max_speed
-            rotation_speed = turn_value * rotation_speed_factor * speed_ratio
-            self.rot += rotation_speed
+            proporcao_vel = abs(self.vel) / self.max_speed
+            velocidade_rotacao = turn_value * fator_rotacao * proporcao_vel
+            self.rot += velocidade_rotacao
 
         # Aceleração
         if accelerate_value > 0:
@@ -187,6 +189,15 @@ class Game:
         self.initialize_game_variables()
         self.initialize_joysticks()
         self.load_assets()
+        
+        # Inicializa a comunicação serial com o Arduino
+        try:
+            self.serial_port = serial.Serial('COM4', 9600, timeout=1)  # Substitua 'COM3' pela porta correta
+            self.serial_port.flush()
+            print("Conectado ao Arduino na porta COM4.")
+        except serial.SerialException:
+            print("Falha ao conectar com o Arduino. Verifique a porta serial.")
+            self.serial_port = None
 
     def initialize_game_variables(self):
         """Inicializa as variáveis do jogo."""
@@ -257,13 +268,14 @@ class Game:
         ]
 
     def handle_input(self):
-        """Processa a entrada de teclas e joystick."""
+        """Processa a entrada de teclas, joystick e Arduino."""
+        # Processa entrada do teclado
         keys = pg.key.get_pressed()
         turn_value = keys[pg.K_RIGHT] - keys[pg.K_LEFT]
         accelerate_value = keys[pg.K_UP]
         brake_value = keys[pg.K_DOWN]
 
-        # Entrada do joystick
+        # Processa entrada do joystick
         if self.joysticks:
             joystick = self.joysticks[0]
             axis_horizontal = joystick.get_axis(0)
@@ -281,6 +293,19 @@ class Game:
                 brake_value = left_trigger_value
             if right_trigger_value > deadzone:
                 accelerate_value = right_trigger_value
+
+        # Lê o valor de direção enviado pelo Arduino
+        if self.serial_port and self.serial_port.is_open:
+            try:
+                if self.serial_port.in_waiting > 0:
+                    linha = self.serial_port.readline().decode('utf-8').rstrip()
+                    steering_value = float(linha)
+                    # Utiliza o steering_value como turn_value
+                    turn_value = steering_value
+            except ValueError:
+                print("Valor inválido recebido do Arduino.")
+            except Exception as e:
+                print(f"Erro ao ler dados seriais: {e}")
 
         # Atualiza o movimento do kart
         self.kart.handle_movement(turn_value, accelerate_value, brake_value)
@@ -499,6 +524,10 @@ class Game:
 
             self.render_game_frame()
             pg.display.update()
+            
+        # Fecha a porta serial ao sair
+        if self.serial_port and self.serial_port.is_open:
+            self.serial_port.close()
 
 def menu():
     """Exibe o menu principal do jogo."""
