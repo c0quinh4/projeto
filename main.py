@@ -4,7 +4,6 @@ from numba import njit
 import random
 import serial
 
-
 # Definição de constantes para largura e altura da tela
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 
@@ -24,13 +23,13 @@ class Kart:
 
     def handle_movement(self, turn_value, accelerate_value, brake_value):
         """Processa os inputs de movimento e ajusta a velocidade e direção do kart."""
-        fator_rotacao = 0.05  # Fator ajustado para velocidade de rotação
+        rotation_speed_factor = 0.01  # Fator de velocidade de rotação
 
         if self.vel != 0:
             # Ajusta a rotação do kart com base na velocidade atual
-            proporcao_vel = abs(self.vel) / self.max_speed
-            velocidade_rotacao = turn_value * fator_rotacao * proporcao_vel
-            self.rot += velocidade_rotacao
+            speed_ratio = abs(self.vel) / self.max_speed
+            rotation_speed = turn_value * rotation_speed_factor * speed_ratio
+            self.rot += rotation_speed
 
         # Aceleração
         if accelerate_value > 0:
@@ -190,14 +189,18 @@ class Game:
         self.initialize_joysticks()
         self.load_assets()
         
-        # Inicializa a comunicação serial com o Arduino
+        # Inicializa a porta serial
         try:
-            self.serial_port = serial.Serial('COM4', 9600, timeout=1)  # Substitua 'COM3' pela porta correta
-            self.serial_port.flush()
-            print("Conectado ao Arduino na porta COM4.")
+            self.serial_port = serial.Serial('COM5', 115200, timeout=0)
+            print("Porta serial COM5 aberta com sucesso.")
         except serial.SerialException:
-            print("Falha ao conectar com o Arduino. Verifique a porta serial.")
+            print("Erro: Não foi possível abrir a porta serial COM5")
             self.serial_port = None
+            
+        # Variáveis para os dados do sensor
+        self.sensor_ay = 0
+        self.sensor_button1 = 0
+        self.sensor_button2 = 0
 
     def initialize_game_variables(self):
         """Inicializa as variáveis do jogo."""
@@ -267,15 +270,43 @@ class Game:
             {'posx': 27.57, 'posy': 18.56}
         ]
 
+    def read_sensor_data(self):
+        """Lê os dados da porta serial e atualiza as entradas do sensor."""
+        if self.serial_port:
+            try:
+                line = self.serial_port.readline().decode('utf-8').rstrip()
+                if line:
+                    #print(f"Linha recebida: '{line}'")  # Adicione esta linha
+                    # Analisa a linha
+                    data_parts = line.split(',')
+                    for part in data_parts:
+                        if part.startswith('ay:'):
+                            value_str = part[3:]
+                            if value_str.strip() != '':
+                                self.sensor_ay = int(value_str)
+                        elif part.startswith('button1:'):
+                            value_str = part[8:]
+                            if value_str.strip() != '':
+                                self.sensor_button1 = int(value_str)
+
+                        elif part.startswith('button2:'):
+                            value_str = part[8:]
+                            if value_str.strip() != '':
+                                self.sensor_button2 = int(value_str)
+
+            except (UnicodeDecodeError, ValueError) as e:
+                print(f"Erro ao analisar os dados seriais: {e}")
+
+
+
     def handle_input(self):
-        """Processa a entrada de teclas, joystick e Arduino."""
-        # Processa entrada do teclado
+        """Processa a entrada de teclas e joystick."""
         keys = pg.key.get_pressed()
         turn_value = keys[pg.K_RIGHT] - keys[pg.K_LEFT]
         accelerate_value = keys[pg.K_UP]
         brake_value = keys[pg.K_DOWN]
 
-        # Processa entrada do joystick
+        # Entrada do joystick
         if self.joysticks:
             joystick = self.joysticks[0]
             axis_horizontal = joystick.get_axis(0)
@@ -284,7 +315,7 @@ class Game:
             deadzone = 0.1
 
             if abs(axis_horizontal) > deadzone:
-                turn_value = axis_horizontal
+                turn_value += axis_horizontal
 
             left_trigger_value = (trigger_axis_left + 1) / 2
             right_trigger_value = (trigger_axis_right + 1) / 2
@@ -293,19 +324,23 @@ class Game:
                 brake_value = left_trigger_value
             if right_trigger_value > deadzone:
                 accelerate_value = right_trigger_value
+                
+        # Entrada do sensor
+        self.read_sensor_data()
+        if self.sensor_ay != 0:
+            # Normaliza o valor de 'ay' para um intervalo entre -1 e 1
+            max_ay = 16384  # Sensibilidade ajustada para o MPU6050
+            normalized_ay = self.sensor_ay / max_ay
+            # Supondo que 'ay' positivo significa virar à direita
+            turn_value -= normalized_ay * 0.5  # Multiplicar para ajustar a sensibilidade
 
-        # Lê o valor de direção enviado pelo Arduino
-        if self.serial_port and self.serial_port.is_open:
-            try:
-                if self.serial_port.in_waiting > 0:
-                    linha = self.serial_port.readline().decode('utf-8').rstrip()
-                    steering_value = float(linha)
-                    # Utiliza o steering_value como turn_value
-                    turn_value = steering_value
-            except ValueError:
-                print("Valor inválido recebido do Arduino.")
-            except Exception as e:
-                print(f"Erro ao ler dados seriais: {e}")
+        if self.sensor_button1 == 1:
+            accelerate_value += 1
+        if self.sensor_button2 == 1:
+            brake_value += 1
+            
+        # Limita 'turn_value' entre -1 e 1
+        turn_value = max(-1, min(1, turn_value))
 
         # Atualiza o movimento do kart
         self.kart.handle_movement(turn_value, accelerate_value, brake_value)
@@ -525,8 +560,8 @@ class Game:
             self.render_game_frame()
             pg.display.update()
             
-        # Fecha a porta serial ao sair
-        if self.serial_port and self.serial_port.is_open:
+        # Fecha a porta serial quando o jogo termina
+        if self.serial_port:
             self.serial_port.close()
 
 def menu():

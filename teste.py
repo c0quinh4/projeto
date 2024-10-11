@@ -1,29 +1,61 @@
 import serial
-import time
+import matplotlib.pyplot as plt
+import matplotlib.animation as animation
 
-def test_serial(port='COM4', baudrate=9600):
-    try:
-        ser = serial.Serial(port, baudrate, timeout=1)
-        ser.flush()
-        print(f"Conectado ao Arduino na porta {port}.")
-    except serial.SerialException:
-        print(f"Falha ao conectar com o Arduino na porta {port}. Verifique a conexão.")
-        return
+# Configuração da porta serial com taxa de baud aumentada
+ser = serial.Serial('COM5', 115200, timeout=1)
 
-    try:
-        while True:
-            if ser.in_waiting > 0:
-                linha = ser.readline().decode('utf-8').rstrip()
-                try:
-                    steering_value = float(linha)
-                    print(f"Valor de Direção: {steering_value}")
-                except ValueError:
-                    print("Valor inválido recebido.")
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        print("Encerrando o teste serial.")
-    finally:
-        ser.close()
+# Variáveis para plotagem
+fig, ax = plt.subplots()
+ys = []
 
-if __name__ == "__main__":
-    test_serial()
+def animate(i):
+    # Ler todas as linhas disponíveis no buffer serial
+    while ser.in_waiting:
+        line = ser.readline()
+
+        # Tente decodificar a linha; se falhar, ignore
+        try:
+            line = line.decode('utf-8').rstrip()
+        except UnicodeDecodeError:
+            print("Dados inválidos recebidos, ignorando esta linha.")
+            continue
+
+        # Dividir a linha por vírgulas
+        parts = line.split(',')
+
+        # Dicionário para armazenar os valores
+        data = {}
+
+        # Iterar sobre cada parte e extrair chave e valor
+        for part in parts:
+            if ':' in part:
+                key, value = part.split(':', 1)
+                data[key] = value
+
+        # Se 'ay' estiver nos dados, processar
+        if 'ay' in data:
+            try:
+                ay_value = int(data['ay'])
+                ys.append(ay_value)
+            except ValueError:
+                print("Não foi possível converter o valor para inteiro:", data['ay'])
+                continue
+        else:
+            print("Linha recebida não contém 'ay':", line)
+
+    # Limite a lista para os últimos 100 valores
+    ys_recent = ys[-100:]
+
+    # Limpe o gráfico e plote os novos dados
+    ax.clear()
+    ax.plot(ys_recent)
+    ax.set_ylim([-32768, 32767])  # Limites para valores int16
+    ax.set_title('Aceleração no Eixo Y')
+    ax.set_xlabel('Amostras')
+    ax.set_ylabel('Valor de ay')
+    ax.grid(True)  # Adiciona o grid ao gráfico
+
+# Reduzido o intervalo para 50ms para atualização mais rápida
+ani = animation.FuncAnimation(fig, animate, interval=50)
+plt.show()
