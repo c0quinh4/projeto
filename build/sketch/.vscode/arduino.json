@@ -1,0 +1,7 @@
+#line 1 "C:\\Python\\Projeto\\projeto\\.vscode\\arduino.json"
+{
+    "sketch": "projeto.ino",
+    "output": "build",
+    "board": "arduino:avr:uno",
+    "port": "COM5"
+}
