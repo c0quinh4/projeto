@@ -6,6 +6,7 @@
 MPU6050 mpu;
 const int buttonPin1 = 7; // Pino onde o botão está conectado
 const int buttonPin2 = 8; // Pino onde o segundo botão está conectado
+const int ledPin = 9;    // Pino onde o LED está conectado
 
 // Variáveis para média móvel
 const int numReadings = 10; // Número de leituras para a média
@@ -14,11 +15,11 @@ int readIndex = 0;          // Índice da leitura atual
 long total = 0;             // Soma das leituras
 int average = 0;            // Média das leituras
 
-#line 15 "C:\\Python\\Projeto\\projeto\\projeto.ino"
+#line 16 "C:\\Python\\Projeto\\projeto\\projeto.ino"
 void setup();
-#line 35 "C:\\Python\\Projeto\\projeto\\projeto.ino"
+#line 46 "C:\\Python\\Projeto\\projeto\\projeto.ino"
 void loop();
-#line 15 "C:\\Python\\Projeto\\projeto\\projeto.ino"
+#line 16 "C:\\Python\\Projeto\\projeto\\projeto.ino"
 void setup() {
   Serial.begin(115200);
   Wire.begin();
@@ -32,10 +33,20 @@ void setup() {
 
   pinMode(buttonPin1, INPUT_PULLUP);
   pinMode(buttonPin2, INPUT_PULLUP);
+  pinMode(ledPin, OUTPUT);  // Configura o pino do LED como saída
 
   // Inicializa o array de leituras com zero
   for (int thisReading = 0; thisReading < numReadings; thisReading++) {
     readings[thisReading] = 0;
+  }
+
+  // Verifica se o sensor está funcionando corretamente
+  if (mpu.testConnection()) {
+    digitalWrite(ledPin, HIGH); // Acende o LED se o sensor estiver OK
+    Serial.println("MPU6050 funcionando corretamente.");
+  } else {
+    digitalWrite(ledPin, LOW);  // Desliga o LED se o sensor falhar
+    Serial.println("Falha na conexão com MPU6050.");
   }
 }
 
@@ -48,6 +59,8 @@ void loop() {
   int buttonState1 = digitalRead(buttonPin1);
   int buttonState2 = digitalRead(buttonPin2);
 
+  // Inverte os estados dos botões
+  buttonState1 = !buttonState1;
   buttonState2 = !buttonState2;
 
   // Implementa a média móvel para 'ay'

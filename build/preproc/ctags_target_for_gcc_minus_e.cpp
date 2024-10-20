@@ -5,6 +5,7 @@
 MPU6050 mpu;
 const int buttonPin1 = 7; // Pino onde o botão está conectado
 const int buttonPin2 = 8; // Pino onde o segundo botão está conectado
+const int ledPin = 9; // Pino onde o LED está conectado
 
 // Variáveis para média móvel
 const int numReadings = 10; // Número de leituras para a média
@@ -26,10 +27,20 @@ void setup() {
 
   pinMode(buttonPin1, 0x2);
   pinMode(buttonPin2, 0x2);
+  pinMode(ledPin, 0x1); // Configura o pino do LED como saída
 
   // Inicializa o array de leituras com zero
   for (int thisReading = 0; thisReading < numReadings; thisReading++) {
     readings[thisReading] = 0;
+  }
+
+  // Verifica se o sensor está funcionando corretamente
+  if (mpu.testConnection()) {
+    digitalWrite(ledPin, 0x1); // Acende o LED se o sensor estiver OK
+    Serial.println("MPU6050 funcionando corretamente.");
+  } else {
+    digitalWrite(ledPin, 0x0); // Desliga o LED se o sensor falhar
+    Serial.println("Falha na conexão com MPU6050.");
   }
 }
 
@@ -42,6 +53,8 @@ void loop() {
   int buttonState1 = digitalRead(buttonPin1);
   int buttonState2 = digitalRead(buttonPin2);
 
+  // Inverte os estados dos botões
+  buttonState1 = !buttonState1;
   buttonState2 = !buttonState2;
 
   // Implementa a média móvel para 'ay'
