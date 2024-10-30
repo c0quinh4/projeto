@@ -82,3 +82,11 @@ void loop() {
 
   delay(20); // Reduz o delay para melhorar a taxa de atualização
 }
+
+//Fio Azul LED = Pino 9
+//Fio Amarelo botão direito = Pino 7
+//Fio Braco botão direito = GND
+//Fio Amarelo botão esquerdo = Pino 8
+//Fio Preto botão esquerdo = GND
+//Fio Amarelo sensor = Pino A4
+//Fio Verde sensor = Pino A5
