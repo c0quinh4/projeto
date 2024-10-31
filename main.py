@@ -19,7 +19,7 @@ class Kart:
         self.brake_deceleration = 0.00005     # Taxa de desaceleração ao frear
         self.max_speed = 0.01                 # Velocidade máxima para frente
         self.min_speed = -0.005               # Velocidade máxima para trás (marcha à ré)
-        self.slow_down_factor = 0.99          # Fator de redução de velocidade na pista
+        self.slow_down_factor = 1          # Fator de redução de velocidade na pista
 
     def handle_movement(self, turn_value, accelerate_value, brake_value):
         """Processa os inputs de movimento e ajusta a velocidade e direção do kart."""
@@ -56,7 +56,7 @@ class Kart:
     def update(self, et, on_track, maph, size):
         """Atualiza a posição do kart com base no tempo e verifica colisões."""
         # Aplica o fator de redução de velocidade se o kart estiver na pista
-        if on_track:
+        if not on_track:
             self.vel *= self.slow_down_factor
 
         # Calcula a nova posição do kart
@@ -99,6 +99,7 @@ class Renderer:
         self.floor = self.load_image('assets/MarioKart.png')
         self.track_surface = self.load_image('assets/pista.png', alpha=True)
         self.border_surface = self.load_image('assets/borda.png', alpha=True)
+        self.externos_surface = self.load_image('assets/externo.png', alpha=True)
         self.wall_texture = np.full((100, 100, 3), [0, 0, 1])  # Textura azul para as paredes
 
     @staticmethod
@@ -107,9 +108,14 @@ class Renderer:
         image = pg.image.load(path)
         if alpha:
             image = image.convert_alpha()
+            array = pg.surfarray.pixels_alpha(image) / 255
+            array_rgb = pg.surfarray.array3d(image) / 255
+            # Adiciona o canal alfa como a quarta dimensão
+            array_rgba = np.dstack((array_rgb, array))
+            return array_rgba
         else:
             image = image.convert()
-        return pg.surfarray.array3d(image) / 255
+            return pg.surfarray.array3d(image) / 255
 
     @staticmethod
     def load_and_scale_image(path, size):
@@ -126,9 +132,30 @@ class Renderer:
         return pg.surfarray.make_surface(self.frame * 255)
 
     def is_on_track(self, posx, posy):
-        """Verifica se o kart está na pista."""
-        xx, yy = int(posx / 30 % 1 * 1023), int(posy / 30 % 1 * 1023)
-        return np.mean(self.track_surface[xx][yy]) > 0.5
+        """Verifica se o kart está na pista usando o canal alfa."""
+        width, height = self.track_surface.shape[:2]
+        # Converte a posição do mundo para coordenadas de pixel na imagem
+        xx = int((posx / self.size) * (width - 1))
+        yy = int((posy / self.size) * (height - 1))
+        # Garante que os índices estejam dentro dos limites
+        xx = np.clip(xx, 0, width - 1)
+        yy = np.clip(yy, 0, height - 1)
+        # Obtém o valor do canal alfa
+        alpha = self.track_surface[xx, yy, 3]
+        return alpha > 0.5
+
+    def is_coin_on_track(self, posx, posy):
+        """Verifica se o kart está na pista usando o canal alfa."""
+        width, height = self.track_surface.shape[:2]
+        # Converte a posição do mundo para coordenadas de pixel na imagem
+        xx = int((posx / self.size) * (width - 1))
+        yy = int((posy / self.size) * (height - 1))
+        # Garante que os índices estejam dentro dos limites
+        xx = np.clip(xx, 0, width - 1)
+        yy = np.clip(yy, 0, height - 1)
+        # Obtém o valor do canal alfa
+        alpha = self.track_surface[xx, yy, 3]
+        return alpha > 0.5
 
 @njit()
 def new_frame(posx, posy, rot, frame, sky, floor, track_surface, hres, halfvres, mod, maph, size, wall_texture):
@@ -172,6 +199,26 @@ class SoundManager:
         pg.mixer.music.load('assets/nirvana.mp3')
         pg.mixer.music.play(-1)
         pg.mixer.music.set_volume(0.3)
+        
+        # Sons de eventos
+        self.item_sound = pg.mixer.Sound('assets/item.mp3')
+        self.boost_sound = pg.mixer.Sound('assets/boost.mp3')
+        self.unboost_sound = pg.mixer.Sound('assets/unboost.mp3')
+        self.coin_up_sound = pg.mixer.Sound('assets/coin_up.mp3')
+        self.coin_down_sound = pg.mixer.Sound('assets/coin_down.mp3')
+        
+        # Sons de vitória e derrota
+        self.victory_sound = pg.mixer.Sound('assets/victory.mp3')
+        self.lose_sound = pg.mixer.Sound('assets/lose.mp3')
+        
+        # Controle de volume dos sons
+        self.item_sound.set_volume(0.5)
+        self.boost_sound.set_volume(0.5)
+        self.unboost_sound.set_volume(0.5)
+        self.coin_up_sound.set_volume(0.5)
+        self.coin_down_sound.set_volume(0.5)
+        self.victory_sound.set_volume(0.5)
+        self.lose_sound.set_volume(0.5)
 
 class Game:
     def __init__(self):
@@ -213,6 +260,11 @@ class Game:
         self.power_in_use = False
         self.powers = ['Boost', 'Un-Boost', 'Moeda :)', 'Moeda :(', 'Volta :)', 'Volta :(']
         self.coin_count = 0
+        self.start_time = None
+        self.game_over = False
+        self.game_over_time = None
+        self.game_result = None
+        self.restart_game = False
 
     def initialize_joysticks(self):
         """Inicializa os joysticks conectados."""
@@ -261,15 +313,17 @@ class Game:
             {'posx': 11.27, 'posy': 4.06, 'active': True, 'respawn_time': None},
             {'posx': 11.70, 'posy': 3.32, 'active': True, 'respawn_time': None}
         ]
-        # Moedas com posição
-        self.coins = [
-            {'posx': 21.82, 'posy': 9.26},
-            {'posx': 1.51, 'posy': 11.55},
-            {'posx': 7.69, 'posy': 19.17},
-            {'posx': 21.29, 'posy': 25.97},
-            {'posx': 27.57, 'posy': 18.56}
-        ]
-
+        # Gerar 15 moedas em posições aleatórias dentro da pista
+        self.coins = []
+        num_coins = 15
+        while len(self.coins) < num_coins:
+            # Gerar posx e posy aleatórios dentro dos limites do mapa
+            posx = random.uniform(0, self.renderer.size)
+            posy = random.uniform(0, self.renderer.size)
+            # Verificar se a posição está na pista
+            if self.renderer.is_on_track(posx, posy):
+                self.coins.append({'posx': posx, 'posy': posy})
+                
     def read_sensor_data(self):
         """Lê os dados da porta serial e atualiza as entradas do sensor."""
         if self.serial_port:
@@ -296,8 +350,6 @@ class Game:
 
             except (UnicodeDecodeError, ValueError) as e:
                 print(f"Erro ao analisar os dados seriais: {e}")
-
-
 
     def handle_input(self):
         """Processa a entrada de teclas e joystick."""
@@ -440,6 +492,15 @@ class Game:
         power_text = 'Poder: Nenhum' if self.current_power is None else f'Poder: {self.current_power}'
         self.draw_text(power_text, 10, 70)
 
+        # Adicionar o tempo decorrido
+        if self.start_time is not None:
+            elapsed_time_ms = pg.time.get_ticks() - self.start_time
+            elapsed_seconds = int(elapsed_time_ms / 1000)
+            minutes = elapsed_seconds // 60
+            seconds = elapsed_seconds % 60
+            time_str = f'Tempo: {minutes:02}:{seconds:02}'
+            self.draw_text(time_str, SCREEN_WIDTH - 10, 40, align_right=True)
+
     def draw_text(self, text, x, y, align_right=False):
         """Desenha texto na tela."""
         text_surface = self.font.render(text, True, (255, 255, 255))
@@ -469,6 +530,7 @@ class Game:
                 if box['active'] and self.is_colliding(self.kart, box):
                     box['active'] = False
                     box['respawn_time'] = pg.time.get_ticks() + 10000  # 10 segundos para reaparecer
+                    self.sound_manager.item_sound.play()  # Toca som ao coletar item
                     self.current_power = "Press X / R"
                     break
 
@@ -486,19 +548,25 @@ class Game:
         self.power_activation_time = pg.time.get_ticks()
         self.power_in_use = True
 
-        # Aplica o efeito do poder
+        # Aplica o efeito do poder e toca o som apropriado
         if self.current_power == 'Boost':
             self.kart.max_speed *= 1.5
+            self.sound_manager.boost_sound.play()
         elif self.current_power == 'Un-Boost':
             self.kart.max_speed *= 0.5
+            self.sound_manager.unboost_sound.play()
         elif self.current_power == 'Moeda :)':
             self.coin_count += 1
+            self.sound_manager.coin_up_sound.play()
         elif self.current_power == 'Moeda :(':
             self.coin_count = max(0, self.coin_count - 1)
+            self.sound_manager.coin_down_sound.play()
         elif self.current_power == 'Volta :)':
             self.lap_count = max(0, self.lap_count - 1)
+            self.sound_manager.coin_up_sound.play()
         elif self.current_power == 'Volta :(':
             self.lap_count += 1
+            self.sound_manager.coin_down_sound.play()
 
     def update_powers(self):
         """Atualiza o estado dos poderes ativos."""
@@ -526,12 +594,84 @@ class Game:
         text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
         self.screen.blit(text_surface, text_rect)
         pg.display.update()
+        
+    def show_victory_screen(self):
+        """Exibe a tela de vitória."""
+        # Carregar a imagem de fundo
+        background = pg.image.load('assets/fundo.png')
+        self.screen.blit(background, (0, 0))
+        # Calcular tempo total
+        total_time = (self.game_over_time - self.start_time) / 1000  # em segundos
+        minutes = int(total_time // 60)
+        seconds = int(total_time % 60)
+        time_str = f"{minutes} minutos e {seconds} segundos" if minutes > 0 else f"{seconds} segundos"
+        message = f"Parabéns, você coletou as 10 moedas em {time_str} e em {self.lap_count} voltas!"
+        # Renderizar a mensagem
+        text_surface = self.font_2.render(message, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
+        self.screen.blit(text_surface, text_rect)
+        # Exibir os botões
+        self.show_end_screen_buttons()
+        pg.display.update()
+
+    def show_lose_screen(self):
+        """Exibe a tela de derrota."""
+        # Carregar a imagem de fundo
+        background = pg.image.load('assets/fundo.png')
+        self.screen.blit(background, (0, 0))
+        # Mensagem
+        message = f"Você perdeu! Coletou {self.coin_count} moedas."
+        # Renderizar a mensagem
+        text_surface = self.font_2.render(message, True, (255, 255, 255))
+        text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2 - 50))
+        self.screen.blit(text_surface, text_rect)
+        # Exibir os botões
+        self.show_end_screen_buttons()
+        pg.display.update()
+        
+    def show_end_screen_buttons(self):
+        """Exibe os botões de 'play' e 'exit' na tela final."""
+        # Carregar os botões
+        play_button = pg.transform.scale(pg.image.load('assets/play.png'), (200, 80))
+        exit_button = pg.transform.scale(pg.image.load('assets/exit.png'), (200, 80))
+        # Definir as posições dos botões (lado a lado)
+        play_button_rect = play_button.get_rect(center=(SCREEN_WIDTH // 2 - 110, SCREEN_HEIGHT // 2 + 50))
+        exit_button_rect = exit_button.get_rect(center=(SCREEN_WIDTH // 2 + 110, SCREEN_HEIGHT // 2 + 50))
+        self.screen.blit(play_button, play_button_rect)
+        self.screen.blit(exit_button, exit_button_rect)
+        # Salvar os retângulos dos botões para detecção de clique
+        self.end_screen_play_button_rect = play_button_rect
+        self.end_screen_exit_button_rect = exit_button_rect
+            
+    def wait_for_menu_selection(self):
+        """Espera a seleção do jogador na tela final."""
+        waiting = True
+        while waiting:
+            for event in pg.event.get():
+                if event.type == pg.QUIT:
+                    waiting = False
+                    self.running = False
+                elif event.type == pg.MOUSEBUTTONDOWN:
+                    mouse_pos = pg.mouse.get_pos()
+                    if self.end_screen_play_button_rect.collidepoint(mouse_pos):
+                        # **Reiniciar o jogo**
+                        waiting = False
+                        self.running = False  # Sair do jogo atual
+                        # Definir uma flag para reiniciar no menu
+                        self.restart_game = True
+                    elif self.end_screen_exit_button_rect.collidepoint(mouse_pos):
+                        # **Sair do jogo**
+                        waiting = False
+                        self.running = False
+            pg.time.wait(100)
 
     def run(self):
         """Método principal que executa o loop do jogo."""
         self.show_loading_screen()
         pg.time.wait(2000)
         self.countdown()
+        
+        self.start_time = pg.time.get_ticks()
 
         while self.running:
             power_button_pressed = False
@@ -560,6 +700,43 @@ class Game:
             self.render_game_frame()
             pg.display.update()
             
+            if not self.game_over:
+                # **Verificar condições de vitória e derrota**
+                current_time = pg.time.get_ticks()
+                elapsed_time = (current_time - self.start_time) / 1000  # Tempo em segundos
+                if self.coin_count >= 2 and elapsed_time <= 30 and self.lap_count <= 10:
+                    # **Jogador venceu**
+                    self.game_over = True
+                    self.game_over_time = current_time
+                    self.game_result = 'win'
+                    # Parar a música de fundo
+                    pg.mixer.music.stop()
+                    # Tocar som de vitória
+                    self.sound_manager.victory_sound.play()
+                elif elapsed_time > 30 or self.lap_count >= 10:
+                    # **Jogador perdeu**
+                    self.game_over = True
+                    self.game_over_time = current_time
+                    self.game_result = 'lose'
+                    # Parar a música de fundo
+                    pg.mixer.music.stop()
+                    # Tocar som de derrota
+                    self.sound_manager.lose_sound.play()
+                    
+            # **Mover o bloco abaixo para fora do 'if not self.game_over:'**
+            if self.game_over:
+                # **Esperar 3 segundos antes de mostrar a tela final**
+                if pg.time.get_ticks() - self.game_over_time >= 3000:
+                    if self.game_result == 'win':
+                        self.show_victory_screen()
+                    else:
+                        self.show_lose_screen()
+                    # Pausar para permitir que o jogador veja a tela final
+                    self.wait_for_menu_selection()
+                    # Depois que o jogador faz uma seleção, sair do loop
+                    self.running = False
+                    break  # Sair do loop do jogo
+                    
         # Fecha a porta serial quando o jogo termina
         if self.serial_port:
             self.serial_port.close()
@@ -591,7 +768,13 @@ def menu():
             elif event.type == pg.MOUSEBUTTONDOWN:
                 mouse_pos = pg.mouse.get_pos()
                 if play_button_rect.collidepoint(mouse_pos):
-                    Game().run()
+                    game = Game()
+                    game.run()
+                    # **Verificar se o jogador selecionou reiniciar o jogo**
+                    if game.restart_game:
+                        continue  # Reiniciar o loop para começar o jogo novamente
+                    else:
+                        running = False  # Sair se o jogador não quiser reiniciar
                 elif exit_button_rect.collidepoint(mouse_pos):
                     running = False
 
