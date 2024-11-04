@@ -19,7 +19,7 @@ class Kart:
         self.brake_deceleration = 0.00005     # Taxa de desaceleração ao frear
         self.max_speed = 0.01                 # Velocidade máxima para frente
         self.min_speed = -0.005               # Velocidade máxima para trás (marcha à ré)
-        self.slow_down_factor = 1          # Fator de redução de velocidade na pista
+        self.slow_down_factor = 1         # Fator de redução de velocidade na pista
 
     def handle_movement(self, turn_value, accelerate_value, brake_value):
         """Processa os inputs de movimento e ajusta a velocidade e direção do kart."""
@@ -55,25 +55,46 @@ class Kart:
 
     def update(self, et, on_track, maph, size):
         """Atualiza a posição do kart com base no tempo e verifica colisões."""
-        # Aplica o fator de redução de velocidade se o kart estiver na pista
+        # Aplica o fator de redução de velocidade se o kart estiver fora da pista
         if not on_track:
             self.vel *= self.slow_down_factor
 
-        # Calcula a nova posição do kart
+        # Calcula os deltas de posição
         cos_rot = np.cos(self.rot)
         sin_rot = np.sin(self.rot)
         delta_x = cos_rot * self.vel * et
         delta_y = sin_rot * self.vel * et
+
+        # Próximas posições potenciais
         next_posx = self.posx + delta_x
         next_posy = self.posy + delta_y
 
-        # Verifica colisão com as paredes
-        map_x, map_y = int(next_posx) % size, int(next_posy) % size
+        # Flags para verificar se o movimento é possível em cada eixo
+        can_move_x = True
+        can_move_y = True
+
+        # Checa colisão no eixo x
+        map_x, map_y = int(next_posx) % size, int(self.posy) % size
         if maph[map_x][map_y] != 1:
             self.posx = next_posx
+        else:
+            can_move_x = False
+
+        # Checa colisão no eixo y
+        map_x, map_y = int(self.posx) % size, int(next_posy) % size
+        if maph[map_x][map_y] != 1:
             self.posy = next_posy
         else:
+            can_move_y = False
+
+        # Se não puder se mover em nenhum eixo, para o kart
+        if not can_move_x and not can_move_y:
             self.vel = 0
+        # Se estiver deslizando na parede (colidiu em um eixo, mas não no outro), diminui a velocidade
+        elif not can_move_x or not can_move_y:
+            # Aplica uma desaceleração
+            sliding_friction = 0.985  # Fator de redução de velocidade ao deslizar (20% de redução)
+            self.vel *= sliding_friction
 
 class Renderer:
     def __init__(self, hres, halfvres):
@@ -141,7 +162,7 @@ class Renderer:
         xx = np.clip(xx, 0, width - 1)
         yy = np.clip(yy, 0, height - 1)
         # Obtém o valor do canal alfa
-        alpha = self.track_surface[xx, yy, 3]
+        alpha = self.track_surface[yy, xx, 3]
         return alpha > 0.5
 
     def is_coin_on_track(self, posx, posy):
@@ -154,7 +175,7 @@ class Renderer:
         xx = np.clip(xx, 0, width - 1)
         yy = np.clip(yy, 0, height - 1)
         # Obtém o valor do canal alfa
-        alpha = self.track_surface[xx, yy, 3]
+        alpha = self.track_surface[yy, xx, 3]
         return alpha > 0.5
 
 @njit()
@@ -321,7 +342,7 @@ class Game:
             posx = random.uniform(0, self.renderer.size)
             posy = random.uniform(0, self.renderer.size)
             # Verificar se a posição está na pista
-            if self.renderer.is_on_track(posx, posy):
+            if self.renderer.is_coin_on_track(posx, posy):
                 self.coins.append({'posx': posx, 'posy': posy})
                 
     def read_sensor_data(self):
@@ -354,9 +375,9 @@ class Game:
     def handle_input(self):
         """Processa a entrada de teclas e joystick."""
         keys = pg.key.get_pressed()
-        turn_value = keys[pg.K_RIGHT] - keys[pg.K_LEFT]
-        accelerate_value = keys[pg.K_UP]
-        brake_value = keys[pg.K_DOWN]
+        turn_value = (keys[pg.K_RIGHT] or keys[pg.K_d]) - (keys[pg.K_LEFT] or keys[pg.K_a])
+        accelerate_value = keys[pg.K_UP] or keys[pg.K_w]
+        brake_value = keys[pg.K_DOWN] or keys[pg.K_s]
 
         # Entrada do joystick
         if self.joysticks:
@@ -441,25 +462,28 @@ class Game:
 
     def render_game_frame(self):
         """Renderiza o quadro atual do jogo."""
-        frame_surface = self.renderer.render_frame(self.kart.posx, self.kart.posy, self.kart.rot)
-        self.draw_objects(frame_surface)
+        camera_offset = -1.0  # Desloca a câmera para trás do kart
+        camera_x = self.kart.posx + np.cos(self.kart.rot) * camera_offset
+        camera_y = self.kart.posy + np.sin(self.kart.rot) * camera_offset
+        frame_surface = self.renderer.render_frame(camera_x, camera_y, self.kart.rot)
+        self.draw_objects(frame_surface, camera_x, camera_y)  # Passa a posição da câmera
         frame_surface = pg.transform.scale(frame_surface, (SCREEN_WIDTH, SCREEN_HEIGHT))
         self.screen.blit(frame_surface, (0, 0))
         self.screen.blit(self.current_sprite, self.current_sprite.get_rect(center=(400, 600 - 120)))
         self.draw_ui()
 
-    def draw_objects(self, frame_surface):
+    def draw_objects(self, frame_surface, camera_x, camera_y):
         """Desenha as caixas de itens e moedas na tela."""
-        self.draw_sprites(frame_surface, self.item_boxes, self.box_sprite, is_active_key='active')
-        self.draw_sprites(frame_surface, self.coins, self.coin_sprite)
+        self.draw_sprites(frame_surface, self.item_boxes, self.box_sprite, camera_x, camera_y, is_active_key='active')
+        self.draw_sprites(frame_surface, self.coins, self.coin_sprite, camera_x, camera_y)
 
-    def draw_sprites(self, frame_surface, objects, sprite_image, is_active_key=None):
-        """Desenha sprites na tela com base na posição relativa ao kart."""
+    def draw_sprites(self, frame_surface, objects, sprite_image, camera_x, camera_y, is_active_key=None):
+        """Desenha sprites na tela com base na posição relativa à câmera."""
         for obj in objects:
             if is_active_key and not obj.get(is_active_key, True):
                 continue
-            dx = obj['posx'] - self.kart.posx
-            dy = obj['posy'] - self.kart.posy
+            dx = obj['posx'] - camera_x
+            dy = obj['posy'] - camera_y
             distance = np.hypot(dx, dy)
             angle_to_obj = np.arctan2(dy, dx)
             angle_difference = (angle_to_obj - self.kart.rot + np.pi) % (2 * np.pi) - np.pi
@@ -704,7 +728,7 @@ class Game:
                 # **Verificar condições de vitória e derrota**
                 current_time = pg.time.get_ticks()
                 elapsed_time = (current_time - self.start_time) / 1000  # Tempo em segundos
-                if self.coin_count >= 2 and elapsed_time <= 30 and self.lap_count <= 10:
+                if self.coin_count >= 10 and elapsed_time <= 9999 and self.lap_count <= 10:
                     # **Jogador venceu**
                     self.game_over = True
                     self.game_over_time = current_time
@@ -713,7 +737,7 @@ class Game:
                     pg.mixer.music.stop()
                     # Tocar som de vitória
                     self.sound_manager.victory_sound.play()
-                elif elapsed_time > 30 or self.lap_count >= 10:
+                elif elapsed_time > 9999 or self.lap_count >= 10:
                     # **Jogador perdeu**
                     self.game_over = True
                     self.game_over_time = current_time
