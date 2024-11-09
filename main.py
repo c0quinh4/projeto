@@ -250,7 +250,6 @@ class Game:
         # Inicializa o kart, o renderizador e o gerenciador de som
         self.kart = Kart()
         self.renderer = Renderer(120, 100)
-        self.sound_manager = SoundManager()
         # Carrega os sprites e os assets
         self.load_sprites()
         self.initialize_game_variables()
@@ -269,6 +268,17 @@ class Game:
         self.sensor_ay = 0
         self.sensor_button1 = 0
         self.sensor_button2 = 0
+        self.sensor_button3 = 0
+        self.sensor_button4 = 0
+        
+        # Variáveis para controle dos botões e pausa
+        self.sensor_button3_prev = 0  # Estado anterior do botão 3
+        self.sensor_button4_prev = 0  # Estado anterior do botão 4
+        self.power_button_pressed = False  # Flag para uso do poder
+        self.pause_button_pressed = False  # Flag para pausa/despausa do jogo
+        self.paused = False  # Estado do jogo (pausado ou não)
+        self.pause_start_time = None  # Tempo em que o jogo foi pausado
+        self.total_paused_time = 0    # Tempo total que o jogo ficou pausado
 
     def initialize_game_variables(self):
         """Inicializa as variáveis do jogo."""
@@ -351,8 +361,6 @@ class Game:
             try:
                 line = self.serial_port.readline().decode('utf-8').rstrip()
                 if line:
-                    #print(f"Linha recebida: '{line}'")  # Adicione esta linha
-                    # Analisa a linha
                     data_parts = line.split(',')
                     for part in data_parts:
                         if part.startswith('ay:'):
@@ -363,12 +371,19 @@ class Game:
                             value_str = part[8:]
                             if value_str.strip() != '':
                                 self.sensor_button1 = int(value_str)
-
                         elif part.startswith('button2:'):
                             value_str = part[8:]
                             if value_str.strip() != '':
                                 self.sensor_button2 = int(value_str)
-
+                        # Adicione estas linhas para os botões 3 e 4
+                        elif part.startswith('button3:'):
+                            value_str = part[8:]
+                            if value_str.strip() != '':
+                                self.sensor_button3 = int(value_str)
+                        elif part.startswith('button4:'):
+                            value_str = part[8:]
+                            if value_str.strip() != '':
+                                self.sensor_button4 = int(value_str)
             except (UnicodeDecodeError, ValueError) as e:
                 print(f"Erro ao analisar os dados seriais: {e}")
 
@@ -411,14 +426,26 @@ class Game:
             accelerate_value += 1
         if self.sensor_button2 == 1:
             brake_value += 1
-            
+
+        # Botão 3: usar o poder (somente se o jogo não estiver pausado)
+        if self.sensor_button3 == 1 and self.sensor_button3_prev == 0:
+            if not self.paused:
+                self.power_button_pressed = True
+        self.sensor_button3_prev = self.sensor_button3
+
+        # Botão 4: pausar/despausar o jogo
+        if self.sensor_button4 == 1 and self.sensor_button4_prev == 0:
+            self.pause_button_pressed = True
+        self.sensor_button4_prev = self.sensor_button4
+
         # Limita 'turn_value' entre -1 e 1
         turn_value = max(-1, min(1, turn_value))
 
         # Atualiza o movimento do kart
-        self.kart.handle_movement(turn_value, accelerate_value, brake_value)
-        # Atualiza o sprite atual
-        self.update_current_sprite(turn_value, brake_value)
+        if not self.paused:
+            self.kart.handle_movement(turn_value, accelerate_value, brake_value)
+            # Atualiza o sprite atual
+            self.update_current_sprite(turn_value, brake_value)
 
     def update_current_sprite(self, turn_value, brake_value):
         """Atualiza o sprite do kart com base no movimento."""
@@ -444,6 +471,7 @@ class Game:
             pg.time.wait(1000)
         while pg.mixer.music.get_busy():
             pg.time.wait(100)
+        # **Agora, inicializa o SoundManager após a contagem regressiva**
         self.sound_manager = SoundManager()
         self.controls_enabled = True
 
@@ -518,7 +546,8 @@ class Game:
 
         # Adicionar o tempo decorrido
         if self.start_time is not None:
-            elapsed_time_ms = pg.time.get_ticks() - self.start_time
+            current_time = pg.time.get_ticks()
+            elapsed_time_ms = current_time - self.start_time - self.total_paused_time
             elapsed_seconds = int(elapsed_time_ms / 1000)
             minutes = elapsed_seconds // 60
             seconds = elapsed_seconds % 60
@@ -696,21 +725,50 @@ class Game:
         self.countdown()
         
         self.start_time = pg.time.get_ticks()
-
+        self.pause_start_time = None
+        self.total_paused_time = 0
+        
         while self.running:
-            power_button_pressed = False
             for event in pg.event.get():
                 if event.type == pg.QUIT or (event.type == pg.KEYDOWN and event.key == pg.K_ESCAPE):
                     self.running = False
-                elif event.type == pg.KEYDOWN and event.key == pg.K_r:
-                    power_button_pressed = True
+                elif event.type == pg.KEYDOWN:
+                    if event.key == pg.K_r:
+                        if not self.paused:
+                            self.power_button_pressed = True
+                    elif event.key == pg.K_p:
+                        self.pause_button_pressed = True
                 elif event.type == pg.JOYBUTTONDOWN:
                     if event.button == 2:
-                        power_button_pressed = True
+                        if not self.paused:
+                            self.power_button_pressed = True
+                    elif event.button == 3:
+                        self.pause_button_pressed = True
+
+            self.handle_input()
+
+            # Verifica se o botão de pausa/despausa foi pressionado
+            if self.pause_button_pressed:
+                if not self.paused:
+                    self.paused = True
+                    self.pause_start_time = pg.time.get_ticks()
+                else:
+                    self.paused = False
+                    paused_duration = pg.time.get_ticks() - self.pause_start_time
+                    self.total_paused_time += paused_duration
+                    self.pause_start_time = None
+                # **Reseta a flag de pausa após tratar a pausa/despausa**
+                self.pause_button_pressed = False
+
+            if self.paused:
+                self.render_game_frame()
+                self.display_pause_message()
+                pg.display.update()
+                self.clock.tick(10)  # Limita o FPS quando pausado
+                continue  # Pula para a próxima iteração do loop
 
             if self.controls_enabled:
-                self.handle_input()
-                if power_button_pressed and self.current_power == "Press X / R" and not self.power_in_use:
+                if self.power_button_pressed and self.current_power == "Press X / R" and not self.power_in_use:
                     self.activate_power()
 
                 et = self.clock.tick()
@@ -725,11 +783,12 @@ class Game:
             pg.display.update()
             
             if not self.game_over:
-                # **Verificar condições de vitória e derrota**
+                # Verificar condições de vitória e derrota
                 current_time = pg.time.get_ticks()
-                elapsed_time = (current_time - self.start_time) / 1000  # Tempo em segundos
+                # Ajustar o tempo decorrido considerando o tempo pausado
+                elapsed_time = (current_time - self.start_time - self.total_paused_time) / 1000  # Tempo em segundos
                 if self.coin_count >= 10 and elapsed_time <= 9999 and self.lap_count <= 10:
-                    # **Jogador venceu**
+                    # Jogador venceu
                     self.game_over = True
                     self.game_over_time = current_time
                     self.game_result = 'win'
@@ -738,7 +797,7 @@ class Game:
                     # Tocar som de vitória
                     self.sound_manager.victory_sound.play()
                 elif elapsed_time > 9999 or self.lap_count >= 10:
-                    # **Jogador perdeu**
+                    # Jogador perdeu
                     self.game_over = True
                     self.game_over_time = current_time
                     self.game_result = 'lose'
@@ -747,7 +806,23 @@ class Game:
                     # Tocar som de derrota
                     self.sound_manager.lose_sound.play()
                     
-            # **Mover o bloco abaixo para fora do 'if not self.game_over:'**
+            if self.game_over:
+                # Esperar 3 segundos antes de mostrar a tela final
+                if pg.time.get_ticks() - self.game_over_time >= 3000:
+                    if self.game_result == 'win':
+                        self.show_victory_screen()
+                    else:
+                        self.show_lose_screen()
+                    # Pausar para permitir que o jogador veja a tela final
+                    self.wait_for_menu_selection()
+                    # Depois que o jogador faz uma seleção, sair do loop
+                    self.running = False
+                    break  # Sair do loop do jogo
+
+            # Reseta as flags dos botões
+            self.power_button_pressed = False
+            self.pause_button_pressed = False
+                    
             if self.game_over:
                 # **Esperar 3 segundos antes de mostrar a tela final**
                 if pg.time.get_ticks() - self.game_over_time >= 3000:
@@ -764,6 +839,15 @@ class Game:
         # Fecha a porta serial quando o jogo termina
         if self.serial_port:
             self.serial_port.close()
+            
+    def display_pause_message(self):
+        """Exibe a mensagem 'Jogo Pausado!' piscando no centro da tela."""
+        time_now = pg.time.get_ticks()
+        # Faz a mensagem piscar a cada 500 ms
+        if (time_now // 500) % 2 == 0:
+            text_surface = self.font_2.render('Jogo Pausado!', True, (255, 255, 255))
+            text_rect = text_surface.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            self.screen.blit(text_surface, text_rect)
 
 def menu():
     """Exibe o menu principal do jogo."""
