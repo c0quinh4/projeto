@@ -1,7 +1,6 @@
 #include <Wire.h>
 #include <MPU6050.h>
 MPU6050 mpu;
-
 // Definição dos pinos dos botões
 const int buttonPin1 = 4;  // Pino Botão 1
 const int buttonPin2 = 5;  // Pino Botão 2
@@ -13,7 +12,6 @@ int readings[numReadings];  // Armazena as leituras
 int readIndex = 0;          // Índice da leitura atual
 long total = 0;             // Soma das leituras
 int average = 0;            // Média das leituras
-
 void setup() {
   Serial.begin(115200);
   Wire.begin();
@@ -38,7 +36,6 @@ void setup() {
     Serial.println("Falha na conexão com MPU6050.");
   }
 }
-
 void loop() {
   int16_t ax, ay, az;
   int16_t gx, gy, gz;
