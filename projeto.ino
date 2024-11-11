@@ -4,10 +4,10 @@
 MPU6050 mpu;
 
 // Definição dos pinos dos botões
-const int buttonPin1 = 0;  // Pino onde o Botão 1 está conectado
-const int buttonPin2 = 2;  // Pino onde o Botão 2 está conectado
-const int buttonPin3 = 3; // Pino onde o Botão 3 está conectado
-const int buttonPin4 = 4; // Pino onde o Botão 4 está conectado
+const int buttonPin1 = 4;  // Pino onde o Botão 1 está conectado
+const int buttonPin2 = 5;  // Pino onde o Botão 2 está conectado
+const int buttonPin3 = 2; // Pino onde o Botão 3 está conectado
+const int buttonPin4 = 3; // Pino onde o Botão 4 está conectado
 
 // Variáveis para média móvel
 const int numReadings = 10; // Número de leituras para a média
@@ -34,8 +34,8 @@ void setup() {
   // Configura os pinos dos botões
   pinMode(buttonPin1, INPUT_PULLUP);
   pinMode(buttonPin2, INPUT_PULLUP);
-  pinMode(buttonPin3, INPUT_PULLUP); // Configura o Botão 3 como entrada com pull-up
-  pinMode(buttonPin4, INPUT_PULLUP); // Configura o Botão 4 como entrada com pull-up
+  pinMode(buttonPin3, INPUT_PULLUP);
+  pinMode(buttonPin4, INPUT_PULLUP);
 
   // Inicializa o array de leituras com zero
   for (int thisReading = 0; thisReading < numReadings; thisReading++) {
@@ -60,14 +60,14 @@ void loop() {
   // Leitura dos estados dos botões
   int buttonState1 = digitalRead(buttonPin1);
   int buttonState2 = digitalRead(buttonPin2);
-  buttonState3 = digitalRead(buttonPin3); // Leitura do Botão 3
-  buttonState4 = digitalRead(buttonPin4); // Leitura do Botão 4
+  buttonState3 = digitalRead(buttonPin3);
+  buttonState4 = digitalRead(buttonPin4);
 
   // Inverte os estados dos botões (INPUT_PULLUP)
   buttonState1 = !buttonState1;
   buttonState2 = !buttonState2;
-  buttonState3 = !buttonState3; // Inverte o estado do Botão 3
-  buttonState4 = !buttonState4; // Inverte o estado do Botão 4
+  buttonState3 = !buttonState3;
+  buttonState4 = !buttonState4;
 
   // Implementa a média móvel para 'ay'
   total = total - readings[readIndex];   // Subtrai a leitura mais antiga
@@ -91,10 +91,10 @@ void loop() {
   Serial.print(",button2:");
   Serial.print(buttonState2);
   Serial.print(",button3:");
-  Serial.print(buttonState3); // Inclui o estado do Botão 3
+  Serial.print(buttonState3);
   Serial.print(",button4:");
-  Serial.print(buttonState4); // Inclui o estado do Botão 4
-  Serial.println();  // Garante a quebra de linha
+  Serial.print(buttonState4);
+  Serial.println();
 
-  delay(20);  // Reduz o delay para melhorar a taxa de atualização
+  delay(20);
 }
