@@ -395,6 +395,9 @@ class Game:
         accelerate_value = keys[pg.K_UP] or keys[pg.K_w]
         brake_value = keys[pg.K_DOWN] or keys[pg.K_s]
         # Trata a entrada do joystick se estiver conectado
+        if (keys[pg.K_r] or self.power_button_pressed) and self.current_power == "Press X / R /BOT4" and not self.power_in_use:
+            self.activate_power()
+        # Trata a entrada do joystick se estiver conectado
         if self.joysticks:
             joystick = self.joysticks[0]
             axis_horizontal = joystick.get_axis(0)
@@ -632,13 +635,13 @@ class Game:
         self.power_in_use = True
         # Aplica os efeitos do poder com base no poder selecionado
         if self.current_power == 'Boost':
-            self.kart.max_speed = self.original_max_speed * 2
-            self.kart.acceleration = self.original_acceleration * 2
+            self.kart.max_speed = self.original_max_speed * 3
+            self.kart.acceleration = self.original_acceleration * 3
             #self.kart.vel = self.kart.max_speed
             self.sound_manager.boost_sound.play()
         elif self.current_power == 'Un-Boost':
-            self.kart.max_speed = self.original_max_speed * 0.5
-            self.kart.acceleration = self.original_acceleration * 0.5
+            self.kart.max_speed = self.original_max_speed * 0.2
+            self.kart.acceleration = self.original_acceleration * 0.2
             self.kart.vel = min(self.kart.vel, self.kart.max_speed)
             self.sound_manager.unboost_sound.play()
         elif self.current_power == '+ 1 Moeda :)':
@@ -792,10 +795,10 @@ class Game:
                     if event.key == pg.K_r:
                         if not self.paused:
                             self.power_button_pressed = True
-                    elif event.key == pg.K_p:
+                    elif event.key == pg.K_BACKSPACE:
                         self.pause_button_pressed = True
                 elif event.type == pg.JOYBUTTONDOWN:
-                    if event.button == 2:
+                    if event.button == 2:  # Botão "X" no controle de Xbox
                         if not self.paused:
                             self.power_button_pressed = True
                     elif event.button == 3:
